@@ -5,7 +5,9 @@ def load_data(name):
     jfile = open(name, "r")
     dicti = json.load(jfile)
     return dicti
-    
+def save_data(dicti,name):
+      jfile = open(name, "w")
+      jfile = json.dump(dicti, jfile)   
     
 def save_model(checkpoint, path):
 
