@@ -71,6 +71,23 @@ class GAT1(nn.Module): #Ex Conf4
     return x
 
 
+class Predictor(nn.Module):
+  ''' This architecture is used as head of GAT2, to predict the genres of an artist '''
+  def __init__(self):
+    super(Predictor, self).__init__()
+    
+
+    self.linear1 = nn.Linear(256,64)
+    self.linear2 = nn.Linear(64,26)
+
+  def forward(self, x):
+
+    x = self.linear1(x)
+    x = F.elu(x)
+    x = self.linear2(x)
+    x = F.elu(x)
+
+    return x
 
 class GAT2(nn.Module):
   ''' This architecture is one of the 2 GAT networks, its aim is to be improved in order to see how it performs on the artist similarity task '''
