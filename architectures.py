@@ -28,71 +28,36 @@ class FCL(nn.Module):
     return out
 
 
-class GAT1(nn.Module): #Ex Conf4
-  ''' This architecture is one of the 2 GAT networks, its aim is to be improved in order to see how it performs on the artist similarity task '''
-  def __init__(self, batch = True):
-    super(GAT1, self).__init__()
-
-    n_heads = 1
-    self.batch = batch
-    self.GAT1 = GATConv(2613,256, heads = n_heads, bias = True)
-    self.GAT2 = GATConv(n_heads*256,256, heads = n_heads, bias = True)
-
-    self.l1 = nn.Linear(n_heads*256,256)
-    self.l2 = nn.Linear(256,256)
-
-
-    ''' The Batch normalization layers have been introduced to speed the training up, and indeed to obtain better results. '''
-    if self.batch:
-      self.batch1 = torch.nn.BatchNorm1d(256)
-      self.batch2 = torch.nn.BatchNorm1d(256)
-      
-
-  
-  def forward(self, x, edges):
-
-    x = self.GAT1(x,edges)
-    
-    x = F.elu(x)
-    x = self.GAT2(x,edges)
-    
-    x = F.elu(x)
-
-    x = self.l1(x)
-    if self.batch:
-      x = self.batch1(x)
-    x = F.elu(x)
-    
-    x = self.l2(x)
-    if self.batch:
-      x = self.batch2(x)
-    x = F.elu(x)
-
-    return x
-
 
 class Predictor(nn.Module):
   ''' This architecture is used as head of GAT2, to predict the genres of an artist '''
-  def __init__(self):
+  def __init__(self, n_heads):
     super(Predictor, self).__init__()
     
 
-    self.linear1 = nn.Linear(256,64)
-    self.linear2 = nn.Linear(64,26)
+    self.linear1 = nn.Linear(n_heads*256,n_heads*64)
+    self.linear2 = nn.Linear(n_heads*64,n_heads*64)
+    self.linear3 = nn.Linear(n_heads*64,25)
+    self.batch1 = torch.nn.BatchNorm1d(n_heads*64)
+    self.batch2 = torch.nn.BatchNorm1d(n_heads*64)
 
   def forward(self, x):
 
     x = self.linear1(x)
-    x = F.elu(x)
-    x = self.linear2(x)
+    x = self.batch1(x)
     x = F.elu(x)
 
+    x = self.linear2(x)
+    x = self.batch2(x)
+    x = F.elu(x)
+    x = self.linear3(x)
+    
     return x
 
-class GAT2(nn.Module):
+class GATSY(nn.Module):
   ''' This architecture is one of the 2 GAT networks, its aim is to be improved in order to see how it performs on the artist similarity task '''
-  def __init__(self, n_heads):
-    super(GAT2, self).__init__()
+  def __init__(self, n_heads, n_layers):
+    super(GATSY, self).__init__()
 
     ''' The Batch normalization layers have been introduced to speed the training up, and indeed to obtain better results. '''
     
@@ -101,12 +66,22 @@ class GAT2(nn.Module):
     self.batch2 = torch.nn.BatchNorm1d(256)
     self.batch3 = torch.nn.BatchNorm1d(256)
     self.batch4 = torch.nn.BatchNorm1d(n_heads*256)
-    # self.batch5 = torch.nn.BatchNorm1d(256)
-    # self.batch6 = torch.nn.BatchNorm1d(256)
 
+    self.n_layer = n_layers
+    GAT_l = []
+    self.GAT1 = GATConv(256,256, heads = n_heads, bias = True)
+    for n in range(n_layers - 1):
+      GAT_l.append(GATConv(n_heads*256,256, heads = n_heads, bias = True))
 
-    self.GAT2_1 = GATConv(256,256, heads = n_heads, bias = True)
-    self.GAT2_2 = GATConv(n_heads*256,256, heads = n_heads, bias = True)
+    self.GAT_l = nn.Sequential(*GAT_l)
+
+    batch_l = []
+
+    for n in range(n_layers - 1):
+      batch_l.append(torch.nn.BatchNorm1d(n_heads*256))
+
+    self.batch_l = nn.Sequential(*batch_l)
+
 
     self.linear1 = nn.Linear(2613,256)
     self.linear2 = nn.Linear(256,256)
@@ -126,11 +101,16 @@ class GAT2(nn.Module):
     x = self.batch3(x)
     x = F.elu(x)
 
-    x = self.GAT2_1(x,edges)
+    x = self.GAT1(x,edges)
     x = self.batch4(x)
     x = F.elu(x)
 
-    x = self.GAT2_2(x,edges)
+    for i, layer in enumerate(self.GAT_l):
+      x = layer(x, edges) #+ x
+      x = self.batch_l[i](x)
+      x = F.elu(x)
+      
+
     
     return x
 
