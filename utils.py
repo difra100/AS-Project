@@ -16,7 +16,14 @@ def save_model(checkpoint, path):
 def load_model(path,model, device):
 
   checkpoint = torch.load(path, map_location=device)
-  model.load_state_dict(checkpoint['modelState']) 
+  if not 'modelState2' in checkpoint:
+    model.load_state_dict(checkpoint['modelState']) 
+  else:
+    model.GATSY.load_state_dict(checkpoint['modelState']) 
+    model.pred.load_state_dict(checkpoint['modelState2']) 
+
+     
+  
   
   return checkpoint
 

@@ -27,6 +27,20 @@ class FCL(nn.Module):
 
     return out
 
+class GATSYFC(nn.Module):
+
+  def __init__(self, n_heads, n_layers):
+    super(GATSYFC, self).__init__()
+    self.GATSY = GATSY(n_heads, n_layers)
+    self.pred = Predictor(n_heads)
+
+  def forward(self, x, edges):
+
+    x = self.GATSY(x, edges)
+    x = self.pred(x)
+
+    return x
+
 
 
 class Predictor(nn.Module):
