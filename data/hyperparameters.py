@@ -1,0 +1,16 @@
+lamb = 0.8 # This is the value used for the distance weighted sampling
+n_of_neigh = 25 # this is the number of neighbors to fix the computational effort
+n_of_vtrain = 9022 # This is the number of val-train artists
+n_of_train = 10190 # This is the number of train artists
+n_of_test = 11261 # This is the total number of artists
+n_heads = 1
+lr = 6e-5
+wd = 0.1
+n_layers = 2
+batch_size = 512
+loss_mode = 'triplet'
+weight_decay = 0#1e-2 #1e-4
+num_epochs = 20
+filt_perc_train = 0.8
+filt_perc_test = 0.1
+K = 200
