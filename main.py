@@ -11,25 +11,19 @@ from torch.optim import lr_scheduler
 import random
 from random import choice,randrange
 import matplotlib.pyplot as plt
-from sklearn.neighbors import NearestNeighbors
 import math
 import time
 from torch_geometric import seed_everything
 from sklearn.manifold import TSNE
-import pandas as pd
-from pytorch_metric_learning import losses
-from sklearn.metrics import f1_score
+import pprint
+
 
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import wandb
 import argparse
-import shutil
-import gc
+
 # Internal libraries 
 from src.utils import *
 from src.architectures import *
@@ -51,6 +45,8 @@ parser.add_argument("-train_mode", type = bool, default = False)
 parser.add_argument("-test_mode", type = bool, default = False)
 parser.add_argument("-model_name", type = str, default = '')
 parser.add_argument("-wb", type = bool, default = False)
+parser.add_argument("-resume_sweep", type = str, default = '')
+
 
 
 
@@ -66,13 +62,23 @@ train_mode = args.train_mode
 test_mode = args.test_mode
 random = args.random_feat
 filt = args.labels
+wb = args.wb
+model_name = args.model_name
+resume_sweep = args.resume_sweep
+
+if model_name == 'SAGE':
+  n_heads = None
+
+if filt:
+  loss_mode = 'triplet+'
+else:
+  loss_mode = 'triplet'
 
 
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("The device selected in this execution is: ", device)
-
 
 if random == True:
   print("RANDOM MODE HAS BEEN SELECTED..........")
@@ -88,31 +94,11 @@ A = torch.load('./data/adjacencyCOO', map_location=torch.device(device))    # Ad
 
 
 
-art_of_interest = torch.load('./data/intrst_artists.pt')
-labels = torch.load('./data/labels.pt')
 if filt:
   X = X[art_of_interest].detach()
   A1 = A1[art_of_interest, :][:, art_of_interest].detach()
   labels = labels[art_of_interest].detach()
   A = torch.nonzero(A1).T.type(torch.LongTensor).detach()
-
-label_diz = load_data('data/encode_labels.json') # Genre to idx
-label_diz2 = {label_diz[key] : key for key in label_diz} # Idx to genre
-artists = load_data('data/artist_genres.json') # Artist names
-family_diz = load_data('data/family_diz.json')
-
-
- 
-num_classes = torch.unique(labels).shape[0]
-
-
-num_samples = X.shape[0]
-print('The number of samples and classes is {} and {} respectively'.format(num_samples, num_classes))
-
-
-num2artist = load_data('data/dizofartist.json')
-artist2num = {num2artist[key]:key for key in num2artist}
-
 data_for_train_ = int(len(art_of_interest)*filt_perc_train) if filt == True else n_of_vtrain
 data_for_train = int(len(art_of_interest)*filt_perc_train) + int(len(art_of_interest)*filt_perc_test) if filt == True else n_of_train
 fin_val = len(art_of_interest) if filt == True else n_of_test 
@@ -149,61 +135,6 @@ kwargs = {'vtrain_mask':vtrain_mask, 'train_mask':train_mask, 'val_mask':val_mas
 
 data = Data(x=X.to(device), edge_index = A.to(device), y = labels.to(device), **kwargs)
 
-
-class data_split:
-  ''' This class shows an alternative to the torch geometric masks procedure, it was necessary at inference time, where was needed the whole graph for the embedding compuutation '''
-  def __init__(self, data, low, high):
-    ''' Starting from the index 0 to 11260, we choose the interval of intersting samples
-        self.data: contains the whole dataset (nodes and edges)
-        self.rang: define the boundaries
-        self.get_split_from_bounds perform the splitting, returning a x and edge_index attribute resembling the torch geometric Data objects.'''
-    self.data = data
-    self.rang = torch.arange(low, high + 1,1, device = device)
-    self.get_split_from_bounds(low, high)
-
-  def get_split_from_bounds(self, low, high):
-    self.x= self.data.x[low:high]
-    v1_0 = self.data.edge_index[0]
-    v2_0 = self.data.edge_index[1]
-    v1_1 = v1_0[v1_0 < high]
-    v1_2 = v1_1[v1_1 >= low]
-
-    v2_1 = v2_0[v1_0 < high]
-    v2_2 = v2_1[v1_1 >= low]
-    v2_3 = v2_2[v2_2 < high]
-    v2_4 = v2_3[v2_3 >= low]
-    v1_3 = v1_2[v2_2 < high]
-    v1_4 = v1_3[v2_3 >= low]
-
-    self.edge_index = torch.cat((v1_4.unsqueeze(0), v2_4.unsqueeze(0)), dim = 0)
-    
-    return self.x, self.edge_index
-
-  def split_for_inference(self, low_train, low_test, high_train, high_test):
-    ''' At inference time we need to compute the embedding through the train and test artists, but we don want to consider the linkings between the test artist, those must be predicted.
-        This function takes as input the boundaries of the train, and test set, computes the edge indices by removing the undesired connection.
-        This method will be used to compute the accuracy. '''
-    
-    final_edge_indices = torch.tensor([[],[]], device = device)
-    for edge in range(self.edge_index.shape[1]):
-      up = self.edge_index[0][edge].item()
-      down = self.edge_index[1][edge].item()
-
-      if up in range(low_test,high_test) and down in range(low_test, high_test): # If the connection is between test artist we remove it from the edge indices.
-        continue
-
-      else:
-        final_edge_indices = torch.cat((final_edge_indices, self.edge_index[:,edge].reshape((2,1))), dim = 1)
-
-    if device.type == 'cuda':
-      return self.x, final_edge_indices.type(torch.cuda.LongTensor)
-    else:
-      return self.x, final_edge_indices.type(torch.LongTensor)
-
-
-
-
-
 if (train_mode == True and test_mode == False) or ((train_mode == True and test_mode == True)):
   trainmask = data.vtrain_mask
   testmask = data.val_mask
@@ -225,57 +156,64 @@ mode_diz = {1: "You have enabled hyperparameter tuning modality.........",
 
 print(mode_diz[mode])
 
-datamodule = pl_Dataset_(train_loader, test_loader)
 
-datamodule.setup("fit")
-datamodule.setup("test")
+def sweep_train(config=None):
+    # Initialize a new wandb run
+    with wandb.init(config=config, resume = True if resume_sweep != '' else False):
+        # If called by wandb.agent, as below,
+        # this config will be set by Sweep Controller
+        config = wandb.config
+        if model_name == 'SAGE':
+          print("GRAPHSAGE SWEEP TOOL ENABLED")
+          metrics = train_sweep(seed, train_loader, test_loader, None, 3, config.lr, config.wd, num_epochs, loss_mode, K, data, A1, data_summary, mode, wb = wb)
+        else:
+          print("GATSY SWEEP TOOL ENABLED")
+          metrics = train_sweep(seed, train_loader, test_loader, config.n_heads, config.n_layers, config.lr, config.wd, num_epochs, loss_mode, K, data, A1, data_summary, mode, wb = wb)
+        
+        if loss_mode == 'triplet+':
+          accuracy_array = np.array(metrics[0])
+          mean_acc, std_acc = np.mean(accuracy_array), np.std(accuracy_array)
+          print("MEAN AND STANDARD DEVIATION: ", mean_acc, std_acc)
+          wandb.log({"nDCG on test (Mean)": mean_acc, "nDCG on test (Std.)": std_acc})
 
-prefix = "./Sweeps/"
-exp_name = "prova"
-tot_dir = prefix + exp_name + '/'
-
-checkpoint_callback = ModelCheckpoint(dirpath = tot_dir,
-        save_top_k=10, monitor="Loss on test (UNSPV)", mode="min")
-
-early_stop = EarlyStopping(monitor='Loss on test (UNSPV)', patience=5, mode="min")
-
-model = GATSYFC(n_heads, n_layers)
-
-pl_training_MDL = TrainingModule(model, lr, wd, num_epochs, loss_mode, n_heads)
-
-num_gpu = 1 if torch.cuda.is_available() else 0
-
-# if wb:
-#     # initialise the wandb logger and name your wandb project
-#     wandb_logger = WandbLogger(project=project_name, name = "exp_name", config = hyperparameters, entity = 'small_sunbirds')
-
-#     trainer = pl.Trainer(
-#         max_epochs = hyperparameters['epochs'],  # maximum number of epochs.
-#         gpus=num_gpu,  # the number of gpus we have at our disposal.
-#         default_root_dir=prefix, logger = wandb_logger, callbacks = [Get_Metrics(), early_stop, checkpoint_callback], enable_checkpointing = True
-#     )
-
-trainer = pl.Trainer(
-        max_epochs = num_epochs,  # maximum number of epochs.
-        gpus=num_gpu,  # the number of gpus we have at our disposal.
-        default_root_dir=prefix, callbacks = [Get_Metrics(), early_stop, checkpoint_callback], enable_checkpointing = True
-    )
-
-trainer.fit(model = pl_training_MDL, datamodule = datamodule)
-
-print("Best model path is:", checkpoint_callback.best_model_path)
-# and prints it score
-print("Best model score is:\n", checkpoint_callback.best_model_score)
+          f1s_array = np.array(metrics[1])
+          mean_f1s, std_f1s = np.mean(f1s_array), np.std(f1s_array)
+          print("MEAN AND STANDARD DEVIATION: ", mean_f1s, std_f1s)
+          wandb.log({"f1-score on test (Mean)": mean_f1s, "f1-score on test (Std.)": std_f1s})
+        else:
+          accuracy_array = np.array(metrics[0])
+          mean_acc, std_acc = np.mean(accuracy_array), np.std(accuracy_array)
+          print("MEAN AND STANDARD DEVIATION: ", mean_acc, std_acc)
+          wandb.log({"nDCG on test (Mean)": mean_acc, "nDCG on test (Std.)": std_acc})
 
 
 
+if mode != 1:
+  train_generic(seed, train_loader, test_loader, n_heads, n_layers, lr, wd, num_epochs, loss_mode, K, data, A1, data_summary, mode, wb = wb)
 
-model = GATSYFC(n_heads, n_layers)
+
+else:
+  if n_heads != None:
+    sweep_config['parameters'] = parameters_dict_GAT
+  else: 
+    sweep_config['parameters'] = parameters_dict_SAGE
+  if resume_sweep != '':
+      sweep_id = resume_sweep
+      print("RESUMED PAST SWEEP....")
+  else:
+      sweep_id = wandb.sweep(sweep_config, project=project_name, entity=entity_name)
+  pprint.pprint(sweep_config)
+
+    
+
+  wandb.agent(sweep_id, sweep_train, count = 220, project = project_name, entity= entity_name)
 
 
-test_model = TrainingModule.load_from_checkpoint(checkpoint_callback.best_model_path, model = model, lr = lr, wd = wd, num_epochs = num_epochs, loss_mode = loss_mode, n_heads = n_heads)
 
-trainer.test(test_model, dataloaders=datamodule.val_dataloader())
+
+if wb:
+  wandb.finish()
+
 
 
 

@@ -119,7 +119,7 @@ class GATSY(nn.Module):
       x = self.batch_l[i](x)
       x = F.elu(x)
       
-    print(x.shape)
+      
     
     return x
 
@@ -127,9 +127,9 @@ class GraphSage(nn.Module):
   ''' This class is used for all the architectures described in the research, all the details are described in the paper '''
   def __init__(self, aggr = 'mean'):
     super(GraphSage, self).__init__()
-    self.SG1 = SAGEConv(2613, 256, aggr = aggr, normalize = True, bias = True)
-    self.SG2 = SAGEConv(256, 256, aggr = aggr, normalize = True, bias = True)
-    self.SG3 = SAGEConv(256, 256, aggr = aggr, normalize = True, bias = True)
+    self.SG1 = SAGEConv(2613, 256, aggr = aggr, normalize = True, bias = True, proj = True)
+    self.SG2 = SAGEConv(256, 256, aggr = aggr, normalize = True, bias = True, proj = True)
+    self.SG3 = SAGEConv(256, 256, aggr = aggr, normalize = True, bias = True, proj = True)
 
     self.FC1 = nn.Linear(256,256)
     self.FC2 = nn.Linear(256,256)
