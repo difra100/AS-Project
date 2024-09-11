@@ -1,6 +1,8 @@
 import json
 import torch
 import os
+import torch_geometric
+import pytorch_lightning as pl
 
 def load_data(name):
     jfile = open(name, "r")
