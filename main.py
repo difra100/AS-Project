@@ -46,6 +46,7 @@ parser.add_argument("-test_mode", type = bool, default = False)
 parser.add_argument("-model_name", type = str, default = '')
 parser.add_argument("-wb", type = bool, default = False)
 parser.add_argument("-resume_sweep", type = str, default = '')
+parser.add_argument("-count", type = int, default = 220)
 
 
 
@@ -65,6 +66,7 @@ filt = args.labels
 wb = args.wb
 model_name = args.model_name
 resume_sweep = args.resume_sweep
+count = args.count
 
 if model_name == 'SAGE':
   n_heads = None
@@ -206,7 +208,7 @@ else:
 
     
 
-  wandb.agent(sweep_id, sweep_train, count = 220, project = project_name, entity= entity_name)
+  wandb.agent(sweep_id, sweep_train, count = count, project = project_name, entity= entity_name)
 
 
 

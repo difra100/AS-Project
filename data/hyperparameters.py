@@ -4,8 +4,8 @@ n_of_vtrain = 9022 # This is the number of val-train artists
 n_of_train = 10190 # This is the number of train artists
 n_of_test = 11261 # This is the total number of artists
 n_heads = 1
-lr = 6e-5
-wd = 0.1
+lr = 0.001
+wd = 0.000001
 n_layers = 2
 batch_size = 512
 num_epochs = 100
@@ -36,7 +36,7 @@ sweep_config['metric'] = {'name': 'nDCG@200 on test',
 
 parameters_dict_GAT = {
     'lr': {
-        'values': [1e-2, 1e-3, 1e-4]
+        'values': [1e-3, 1e-4]
     },
     'wd': {
         'values': [0, 1e-6, 1e-4, 1e-2]

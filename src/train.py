@@ -29,7 +29,7 @@ from data.hyperparameters import *
 
 def train_sweep(seed, train_loader, test_loader, n_heads, n_layers, lr, wd, num_epochs, loss_mode, K, data, A1, data_summary, mode, wb = False):
   metrics = [[], []]
-  seeds_list = [43, 1337, 7, 777, 9876, 54321, 123456, 999, 31415, 2022]
+  seeds_list = [43, 1337, 7, 777, 9876] #, 54321, 123456, 999, 31415, 2022]
   for seed_ in seeds_list:
     accuracy, f1_s = train_generic(seed_, train_loader, test_loader, n_heads, n_layers, lr, wd, num_epochs, loss_mode, K, data, A1, data_summary, mode, wb = wb)
 
@@ -308,6 +308,8 @@ def compute_f1_score(true, pred, avg = 'macro'):
 
 def eval_accuracy(model, data, A1, data_summary, K = 200, mode = 1): 
     ''' This function computes the Normalized Discounted Cumulative Gain, that is the metric adopted in the research. '''
+    print("Evaluation step....")
+    
     model.eval()
     with torch.no_grad():
       if mode == 1 or mode == 3:
@@ -331,7 +333,6 @@ def eval_accuracy(model, data, A1, data_summary, K = 200, mode = 1):
 
       A_acc = A1[low_test:high_test, low_test:high_test]
 
-      print("Evaluation step....")
       test_embs = out.to(torch.device('cpu')).numpy()
       
       neigh=NearestNeighbors(n_neighbors=(K+1),algorithm='ball_tree').fit(test_embs) #With the K-NN we get the nearest 
